@@ -1,0 +1,16 @@
+let Lookback = 30d;
+EmailEvents
+| where Timestamp > ago(Lookback)
+| where EmailDirection == "Inbound"
+| extend Scl = tostring(parse_json(ConfidenceLevel).Spam)
+| where Scl == "-1" or isnotempty(ExchangeTransportRule)
+| summarize Messages = count(),
+    BypassRequested = countif(Scl == "-1"),
+    DeliveredToInbox = countif(DeliveryLocation startswith "Inbox"),
+    DeliveredWithThreat = countif(DeliveryLocation startswith "Inbox" and isnotempty(ThreatTypes)),
+    LaterRemediated = countif(LatestDeliveryLocation != DeliveryLocation),
+    SenderDomains = dcount(SenderFromDomain),
+    TopSenderDomains = make_set(SenderFromDomain, 10),
+    Threats = make_set(ThreatTypes, 10)
+    by ExchangeTransportRule, OrgLevelPolicy, OrgLevelAction, Connectors
+| order by DeliveredWithThreat desc, Messages desc

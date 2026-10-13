@@ -1,0 +1,23 @@
+let Lookback = 7d;
+let Window = 1h;
+UrlClickEvents
+| where Timestamp > ago(Lookback)
+| where Workload == "Email" and (ActionType == "ClickAllowed" or IsClickedThrough == true)
+| project ClickTime = Timestamp, AccountUpn = tolower(AccountUpn), ClickIp = IPAddress, Url, NetworkMessageId
+| join kind=inner (
+    EntraIdSignInEvents
+    | where Timestamp > ago(Lookback)
+    | where ErrorCode == 0
+    | project SignInTime = Timestamp, AccountUpn = tolower(AccountUpn), AccountObjectId, SignInIp = IPAddress, Country, Application, UserAgent, SessionId
+) on AccountUpn
+| where SignInTime between (ClickTime .. (ClickTime + Window))
+| where SignInIp != ClickIp
+| join kind=leftouter (
+    EmailEvents
+    | where Timestamp > ago(Lookback)
+    | summarize arg_max(Timestamp, OriginalThreatTypes, OriginalDetectionMethods, DeliveryLocation, LatestDeliveryLocation, LatestDeliveryAction) by NetworkMessageId
+) on NetworkMessageId
+| project ClickTime, SignInTime, MinutesAfterClick = datetime_diff('minute', SignInTime, ClickTime), AccountUpn, ClickIp, SignInIp, Country, Application, UserAgent,
+    OriginalVerdict = OriginalThreatTypes, OriginalDetection = OriginalDetectionMethods, OriginalLocation = DeliveryLocation, LatestDeliveryLocation, LatestDeliveryAction,
+    Url, NetworkMessageId, AccountObjectId, SessionId
+| order by ClickTime desc

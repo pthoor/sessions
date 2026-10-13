@@ -1,0 +1,17 @@
+let Lookback = 30d;
+EmailUrlInfo
+| where Timestamp > ago(Lookback)
+| where UrlLocation == "QRCode"
+| project NetworkMessageId, QrUrl = Url, QrDomain = UrlDomain
+| join kind=inner (
+    EmailEvents
+    | where Timestamp > ago(Lookback)
+    | project Timestamp, NetworkMessageId, RecipientEmailAddress, SenderFromDomain, Subject, DeliveryAction, LatestDeliveryLocation, ThreatTypes, DetectionMethods
+) on NetworkMessageId
+| join kind=leftouter (
+    UrlClickEvents
+    | where Timestamp > ago(Lookback)
+    | summarize Clicks = count(), ClickActions = make_set(ActionType) by NetworkMessageId
+) on NetworkMessageId
+| summarize Recipients = dcount(RecipientEmailAddress), Delivered = countif(DeliveryAction == "Delivered"), StillInInbox = countif(LatestDeliveryLocation startswith "Inbox"), SafeLinksClicks = sum(coalesce(Clicks, 0)), Senders = make_set(SenderFromDomain, 10), Verdicts = make_set(ThreatTypes, 10), FirstSeen = min(Timestamp), LastSeen = max(Timestamp) by QrDomain
+| order by Recipients desc

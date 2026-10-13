@@ -1,0 +1,16 @@
+let Lookback = 30d;
+MessageEvents
+| where Timestamp > ago(Lookback)
+| summarize arg_max(Timestamp, *) by TeamsMessageId
+| join kind=leftouter (
+    MessageUrlInfo
+    | where Timestamp > ago(Lookback)
+    | summarize Urls = dcount(Url), UrlDomains = make_set(UrlDomain, 10) by TeamsMessageId
+) on TeamsMessageId
+| join kind=leftouter (
+    MessagePostDeliveryEvents
+    | where Timestamp > ago(Lookback)
+    | summarize PostDelivery = make_set(strcat(ActionType, ': ', Action), 10), LatestLocation = take_any(LatestDeliveryLocation) by TeamsMessageId
+) on TeamsMessageId
+| project Timestamp, TeamsMessageId, SenderEmailAddress, SenderDisplayName, IsExternalThread, MessageSubject, ThreatTypes, DetectionMethods, DeliveryAction, DeliveryLocation, SafetyTip, Urls, UrlDomains, PostDelivery, LatestLocation
+| order by Timestamp desc

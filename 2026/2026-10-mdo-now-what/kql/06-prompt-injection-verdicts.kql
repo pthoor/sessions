@@ -1,0 +1,6 @@
+let Lookback = 30d;
+EmailEvents
+| where Timestamp > ago(Lookback)
+| where DetectionMethods has "Prompt injection protection" or OriginalDetectionMethods has "Prompt injection protection"
+| project Timestamp, NetworkMessageId, SenderFromDomain, RecipientEmailAddress, Subject, IsFirstContact, ThreatTypes, DetectionMethods, ConfidenceLevel, DeliveryLocation, LatestDeliveryLocation
+| order by Timestamp desc

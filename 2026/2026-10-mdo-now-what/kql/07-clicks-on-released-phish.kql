@@ -1,0 +1,13 @@
+let Lookback = 7d;
+EmailEvents
+| where Timestamp > ago(Lookback)
+| summarize arg_max(Timestamp, *) by NetworkMessageId, RecipientEmailAddress
+| where DeliveryLocation == "Quarantine" and LatestDeliveryLocation != "Quarantine"
+| project NetworkMessageId, Recipient = tolower(RecipientEmailAddress), Subject, SenderFromAddress, OriginalThreatTypes, OriginalDetectionMethods, ReleasePolicy = OrgLevelPolicy, LatestDeliveryLocation
+| join kind=inner (
+    UrlClickEvents
+    | where Timestamp > ago(Lookback)
+    | project ClickTime = Timestamp, NetworkMessageId, Recipient = tolower(AccountUpn), Url, ActionType, IsClickedThrough, ClickIp = IPAddress
+) on NetworkMessageId, Recipient
+| project ClickTime, Recipient, Subject, SenderFromAddress, OriginalThreatTypes, OriginalDetectionMethods, ReleasePolicy, LatestDeliveryLocation, Url, ActionType, IsClickedThrough, ClickIp, NetworkMessageId
+| order by ClickTime desc

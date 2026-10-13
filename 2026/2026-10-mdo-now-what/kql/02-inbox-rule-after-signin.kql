@@ -1,0 +1,21 @@
+let Lookback = 7d;
+let RuleActions = dynamic(["New-InboxRule", "Set-InboxRule", "UpdateInboxRules", "Set-Mailbox"]);
+let HidingSignals = dynamic(["DeleteMessage", "PermanentDelete", "MoveToFolder", "MarkAsRead", "ForwardTo", "ForwardAsAttachmentTo", "RedirectTo", "DeliverToMailboxAndForward", "ForwardingSmtpAddress", "RSS Subscriptions", "Conversation History", "Archive"]);
+CloudAppEvents
+| where Timestamp > ago(Lookback)
+| where Application == "Microsoft Exchange Online"
+| where ActionType in (RuleActions)
+| extend RuleDetail = strcat(tostring(RawEventData.Parameters), tostring(RawEventData.OperationProperties))
+| mv-apply Signal = HidingSignals to typeof(string) on (
+    where RuleDetail has Signal
+    | summarize Signals = make_set(Signal)
+)
+| where array_length(Signals) > 0
+| extend SessionId = tostring(RawEventData.SessionId)
+| join kind=leftouter (
+    EntraIdSignInEvents
+    | where Timestamp > ago(Lookback) and ErrorCode == 0
+    | summarize SignInIps = make_set(IPAddress, 20), SignInCountries = make_set(Country, 20) by AccountObjectId
+) on AccountObjectId
+| project Timestamp, AccountDisplayName, ActionType, Signals, IPAddress, CountryCode, ISP, SessionId, SignInIps, SignInCountries, RuleDetail
+| order by Timestamp desc
